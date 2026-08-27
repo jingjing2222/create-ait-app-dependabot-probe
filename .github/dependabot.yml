@@ -17,7 +17,7 @@ updates:
     directory: /.github/version-pins
     schedule:
       interval: cron
-      cronjob: "0 * * * *"
+      cronjob: "0 9 * * *"
       timezone: Asia/Seoul
     cooldown:
       default-days: 2
