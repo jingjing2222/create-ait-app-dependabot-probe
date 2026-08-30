@@ -1,5 +1,7 @@
 version: 2
 
+# Temporary integration probe: run version-pin updates immediately.
+
 updates:
   - package-ecosystem: npm
     directory: /
