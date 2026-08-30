@@ -12,12 +12,12 @@ updates:
     cooldown:
       exclude:
         - create-vite
-    open-pull-requests-limit: 1
+    open-pull-requests-limit: 0
   - package-ecosystem: npm
     directory: /.github/version-pins
     schedule:
       interval: cron
-      cronjob: "0 9 * * *"
+      cronjob: "*/5 * * * *"
       timezone: Asia/Seoul
     cooldown:
       default-days: 2
