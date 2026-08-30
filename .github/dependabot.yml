@@ -1,6 +1,6 @@
 version: 2
 
-# Temporary integration probe: run version-pin updates immediately.
+# Temporary integration probe: run version-pin updates hourly.
 
 updates:
   - package-ecosystem: npm
@@ -19,7 +19,7 @@ updates:
     directory: /.github/version-pins
     schedule:
       interval: cron
-      cronjob: "* * * * *"
+      cronjob: "0 * * * *"
       timezone: Asia/Seoul
     cooldown:
       default-days: 2
