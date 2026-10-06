@@ -1,0 +1,201 @@
+name: Publish to npm
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+      id-token: write
+    outputs:
+      published: ${{ steps.should_publish.outputs.publish }}
+      version: ${{ steps.version.outputs.value }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Check if version changed
+        id: version
+        run: |
+          if git diff HEAD~1 HEAD -- package.json | grep -qE '^[+-].*"version"'; then
+            VERSION=$(node -p "require('./package.json').version")
+            echo "Version changed to ${VERSION}."
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "value=${VERSION}" >> "$GITHUB_OUTPUT"
+          else
+            echo "package.json version unchanged. Skipping publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node.js
+        if: steps.version.outputs.publish == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Enable Corepack
+        if: steps.version.outputs.publish == 'true'
+        run: corepack enable
+
+      - name: Install dependencies
+        if: steps.version.outputs.publish == 'true'
+        run: yarn install --immutable
+
+      - name: Validate version
+        if: steps.version.outputs.publish == 'true'
+        id: release
+        run: yarn node .github/scripts/validate-version.mjs
+
+      - name: Check if version is already published
+        if: steps.version.outputs.publish == 'true'
+        id: should_publish
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          if npm view "create-ait-app@${VERSION}" version >/dev/null 2>&1; then
+            echo "create-ait-app@${VERSION} is already on npm. Skipping publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "create-ait-app@${VERSION} is not published yet."
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate package
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          yarn format:check
+          yarn lint
+          yarn typecheck
+          yarn test
+          yarn build
+          yarn publint
+
+      - name: Collect release notes
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node .github/scripts/collect-release-notes.mjs \
+            "${{ steps.version.outputs.value }}" \
+            "${GITHUB_REF_NAME}" > release-notes.md
+          echo "Release notes:"
+          cat release-notes.md
+
+      - name: Publish to npm
+        if: steps.should_publish.outputs.publish == 'true'
+        run: npm publish --tag "${{ steps.release.outputs.tag }}"
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IS_PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          TAG="v${VERSION}"
+          RELEASE_FLAGS=()
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists. Skipping."
+            exit 0
+          fi
+
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            RELEASE_FLAGS+=(--prerelease)
+          fi
+
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file release-notes.md \
+            "${RELEASE_FLAGS[@]}"
+
+  smoke-test:
+    name: 발행 후 스모크 테스트 (${{ matrix.template }})
+    needs: publish
+    if: needs.publish.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions: {}
+    strategy:
+      fail-fast: false
+      matrix:
+        template: [react-ts, tds]
+    env:
+      VERSION: ${{ needs.publish.outputs.version }}
+    steps:
+      - name: Node.js 설정
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+
+      - name: 레지스트리 전파 대기
+        run: |
+          echo "create-ait-app@${VERSION} 이(가) npm 레지스트리에 반영되기를 기다려요."
+          for i in $(seq 1 30); do
+            if npm view "create-ait-app@${VERSION}" version >/dev/null 2>&1; then
+              echo "레지스트리 반영을 확인했어요. (시도 ${i}회)"
+              exit 0
+            fi
+            echo "아직 반영되지 않았어요. 20초 후 다시 확인해요. (시도 ${i}/30)"
+            sleep 20
+          done
+          echo "::error::10분 동안 create-ait-app@${VERSION}의 레지스트리 반영을 확인하지 못했어요."
+          exit 1
+
+      - name: 발행본으로 스캐폴드
+        run: |
+          if [ "${{ matrix.template }}" = "tds" ]; then
+            npm create ait-app@"${VERSION}" -- smoke-app --inline --pm npm --tds
+          else
+            npm create ait-app@"${VERSION}" -- smoke-app --inline --pm npm --template react-ts
+          fi
+
+      - name: web-framework 버전 고정 검증
+        working-directory: smoke-app
+        run: |
+          ACTUAL=$(node -p "require('./package.json').dependencies['@apps-in-toss/web-framework']")
+          echo "설치된 @apps-in-toss/web-framework 버전 명시자: ${ACTUAL}"
+          if ! echo "$ACTUAL" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::@apps-in-toss/web-framework가 정확 버전으로 고정되지 않았어요: ${ACTUAL}"
+            exit 1
+          fi
+          echo "정확 버전 고정을 확인했어요."
+
+      - name: 빌드
+        working-directory: smoke-app
+        run: |
+          find . -path ./node_modules -prune -o -path ./.git -prune -o -name '*.ait' -print | sort > /tmp/ait-before.txt
+          npm run build
+
+      - name: dist 산출물 확인
+        working-directory: smoke-app
+        run: |
+          if [ ! -f dist/index.html ]; then
+            echo "::error::dist/index.html이 없어요."
+            exit 1
+          fi
+          echo "dist/index.html을 확인했어요."
+
+      - name: .ait 산출물 확인
+        working-directory: smoke-app
+        run: |
+          find . -path ./node_modules -prune -o -path ./.git -prune -o -name '*.ait' -print | sort > /tmp/ait-after.txt
+          NEW_AIT=$(comm -13 /tmp/ait-before.txt /tmp/ait-after.txt)
+          if [ -z "$NEW_AIT" ]; then
+            echo "::error::ait build가 새로운 .ait 산출물을 만들지 않았어요."
+            exit 1
+          fi
+          echo "새로 생성된 .ait 산출물:"
+          echo "$NEW_AIT"

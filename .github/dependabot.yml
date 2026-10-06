@@ -1,49 +1,28 @@
 version: 2
 
-# Controlled hosted path comparison. Remove after collecting results.
+# Hosted path comparison completed; pause further version-update probes.
+
 updates:
   - package-ecosystem: npm
-    directory: /.github/path-probe-20261006
+    directory: /
     schedule:
-      interval: daily
-      time: "09:00"
+      interval: cron
+      cronjob: "0 9 * * *"
       timezone: Asia/Seoul
     allow:
-      - dependency-name: "@apps-in-toss/web-framework"
+      - dependency-name: create-vite
     cooldown:
       exclude:
-        - "@apps-in-toss/web-framework"
-    ignore:
-      - dependency-name: "@apps-in-toss/web-framework"
-        versions: [">3.7.0"]
-    open-pull-requests-limit: 1
+        - create-vite
+    open-pull-requests-limit: 0
   - package-ecosystem: npm
-    directory: /tools/path-probe-20261006
+    directory: /.github/version-pins
     schedule:
-      interval: daily
-      time: "09:00"
+      interval: cron
+      cronjob: "0 * * * *"
       timezone: Asia/Seoul
-    allow:
-      - dependency-name: "@apps-in-toss/web-framework"
     cooldown:
+      default-days: 2
       exclude:
         - "@apps-in-toss/web-framework"
-    ignore:
-      - dependency-name: "@apps-in-toss/web-framework"
-        versions: [">3.7.0"]
-    open-pull-requests-limit: 1
-  - package-ecosystem: npm
-    directory: /.control/path-probe-20261006
-    schedule:
-      interval: daily
-      time: "09:00"
-      timezone: Asia/Seoul
-    allow:
-      - dependency-name: "@apps-in-toss/web-framework"
-    cooldown:
-      exclude:
-        - "@apps-in-toss/web-framework"
-    ignore:
-      - dependency-name: "@apps-in-toss/web-framework"
-        versions: [">3.7.0"]
-    open-pull-requests-limit: 1
+    open-pull-requests-limit: 0
