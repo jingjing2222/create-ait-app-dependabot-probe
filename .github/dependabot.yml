@@ -1,28 +1,49 @@
 version: 2
 
-# Temporary integration probe: run version-pin updates hourly.
-
+# Controlled hosted path comparison. Remove after collecting results.
 updates:
   - package-ecosystem: npm
-    directory: /
+    directory: /.github/path-probe-20261006
     schedule:
-      interval: cron
-      cronjob: "0 9 * * *"
+      interval: daily
+      time: "09:00"
       timezone: Asia/Seoul
     allow:
-      - dependency-name: create-vite
+      - dependency-name: "@apps-in-toss/web-framework"
     cooldown:
-      exclude:
-        - create-vite
-    open-pull-requests-limit: 0
-  - package-ecosystem: npm
-    directory: /.github/version-pins
-    schedule:
-      interval: cron
-      cronjob: "0 * * * *"
-      timezone: Asia/Seoul
-    cooldown:
-      default-days: 2
       exclude:
         - "@apps-in-toss/web-framework"
+    ignore:
+      - dependency-name: "@apps-in-toss/web-framework"
+        versions: [">3.7.0"]
+    open-pull-requests-limit: 1
+  - package-ecosystem: npm
+    directory: /path-probe-20261006
+    schedule:
+      interval: daily
+      time: "09:00"
+      timezone: Asia/Seoul
+    allow:
+      - dependency-name: "@apps-in-toss/web-framework"
+    cooldown:
+      exclude:
+        - "@apps-in-toss/web-framework"
+    ignore:
+      - dependency-name: "@apps-in-toss/web-framework"
+        versions: [">3.7.0"]
+    open-pull-requests-limit: 1
+  - package-ecosystem: npm
+    directory: /.path-probe-20261006
+    schedule:
+      interval: daily
+      time: "09:00"
+      timezone: Asia/Seoul
+    allow:
+      - dependency-name: "@apps-in-toss/web-framework"
+    cooldown:
+      exclude:
+        - "@apps-in-toss/web-framework"
+    ignore:
+      - dependency-name: "@apps-in-toss/web-framework"
+        versions: [">3.7.0"]
     open-pull-requests-limit: 1
